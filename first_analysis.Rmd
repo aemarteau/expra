@@ -1,0 +1,326 @@
+---
+title: "R Notebook"
+output: html_notebook
+params: 
+  data: "/Users/bella/Desktop/Psychologie/Experimentalpraktikum"
+---
+
+```{r}
+library(stringr)
+pacman::p_load(pacman, dplyr, GGally, ggplot2, ggthemes, 
+  ggvis, httr, lubridate, plotly, rio, rmarkdown, shiny, 
+  stringr, tidyr)
+library(tidyverse)
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(plyr)
+library(mediation)
+
+#importing & tidying data
+raw.data <- read.csv2("/Users/bella/Desktop/Psychologie/Experimentalpraktikum/Data_expra7.csv")
+raw.data$diagnose[which(raw.data$diagnose == "Bindehautenzündung")] <- "Bindehautentzündung"
+raw.data$diagnose[which(raw.data$diagnose == "Magenschleimhautenzündung")] <- "Magenschleimhautentzündung"
+raw.data$Geschlecht[which(raw.data$Geschlecht == "mÃ¤nnlich")] <- "m"
+raw.data$Geschlecht[which(raw.data$Geschlecht == "weiblich")] <- "w"
+
+
+raw.data$Vertrauen <- str_replace_all(string = raw.data$Vertrauen, c("gar kein Vertrauen" = "1", "geringes Vertrauen" = "2", "eher 2" = "3", "eher starkes Vertrauen" = "4", "starkes Vertrauen" = "5", "volles Vertrauen" = "6"))
+
+raw.data$Empathie <- str_replace_all(string = raw.data$Empathie, c("gar nicht empathisch" = "1", "nicht empathisch" = "2",  "eher 2" = "3", "eher empathisch" = "4",  "empathisch" = "5", "sehr 5" = "6"))
+
+
+raw.data$Kompetenz <- str_replace_all(string = raw.data$Kompetenz, c("gar nicht kompetent" = "1", "nicht kompetent" = "2", "eher 2" = "3", "eher kompetent" = "4", "kompetent" = "5", "sehr 5" = "6"))
+
+raw.data$Severity <- str_replace_all(string = raw.data$Severity, c("leicht" = "1", "mittel" = "2", "schwer" = "3"))
+
+raw.data$Interesse <- str_replace_all(string = raw.data$Interesse, c("Gar nicht interessiert" = "1", "Nicht interessiert" = "2",  "Eher uninteressiert" = "3", "Eher interessiert" = "4",  "Interessiert" = "5", "Sehr interessiert" = "6"))
+
+raw.data$Bildungsabschluss <- str_replace_all(string = raw.data$Bildungsabschluss, c("kein Schulabschluss" = "1", "Mittlere Reife" = "2", "Fachabitur" = "3", "Abitur" = "4", "Abgeschlossene Ausbildung" = "5", "Abgeschlossenes Bachelorstudium" = "6", "Abgeschlossenes Masterstudium" = "7", "Promotion" = "8"))
+
+data <- raw.data |> mutate_at(vars(c("aihu", "anthropomorphismus", "diagnose", "Severity", "Geschlecht", "Bildungsabschluss", "Beschäftigung", "Interesse")), factor) |>
+  mutate_if(is.integer, as.numeric) |>
+  mutate_if(is.character, as.numeric) |>
+  na.omit()
+
+
+summary(data)
+ 
+```
+
+```{r}
+#visualise data
+hist(data$Vertrauen, col = "thistle")
+
+g = data$Vertrauen
+m <- mean(g)
+std <- sqrt(var(g))
+hist(g, density=20, breaks=20, prob=TRUE, 
+     xlab="Vertrauen", ylim=c(0, 2), 
+     main="Vertrauen: Normalverteilung")
+curve(dnorm(x, mean=m, sd=std), 
+      col="darkblue", lwd=2, add=TRUE, yaxt="n")
+
+#confidence by interest
+plot(data$Interesse, main = "Interesse")
+boxplot(Vertrauen ~ Interesse,
+data = data,
+main = "Vertrauen nach Interesse",
+xlab = "Interesse",ylab = "Vertrauen",
+col = "thistle",border = "black")
+
+boxplot(Vertrauen ~ Beschäftigung,
+data = data,
+main = "Vertrauen nach Beschäftigung",
+xlab = "Beschäftigung",ylab = "Vertrauen",
+col = "blue",border = "black")
+
+plot(data$Interesse, main = "Interesse")
+
+
+#confidence by empathy and competence
+boxplot(Vertrauen ~ Empathie,
+data = data,
+main = "Vertrauen nach Empathie",
+xlab = "Empathie",ylab = "Vertrauen",
+col = "pink",border = "black")
+
+boxplot(Vertrauen ~ Kompetenz,
+data = data,
+main = "Vertrauen nach Kompetenz",
+xlab = "Kompetenz",ylab = "Vertrauen",
+col = "blue",border = "black")
+
+#confidence by age
+age <- data |>
+  select(Vertrauen, Alter) |>
+  group_by(Alter)
+
+boxplot(Vertrauen ~ Alter,
+data = age)
+
+#confidence by accuracy
+boxplot(Accuracy~Vertrauen, data = data)
+
+#confidence by diagnosis
+boxplot(Vertrauen~diagnose, data = data)
+
+#confidence by education
+boxplot(Vertrauen~Bildungsabschluss, data = data)
+
+#confidence by gender
+boxplot(Vertrauen~Geschlecht, data = data)
+(gendata <- aggregate(
+  x = Vertrauen ~ Geschlecht,
+  data = data,
+  FUN = mean
+) |> as.data.frame())
+
+
+#test linearity assumption for dv (Vertrauen) and covariate (Interesse)
+data$Interesse <- as.numeric(data$Interesse)
+ggscatter(
+  data, x = "Vertrauen", y = "Interesse",
+  color = "aihu", add = "reg.line"
+  )+
+  stat_regline_equation(
+    aes(label =  paste(..eq.label.., ..rr.label.., sep = "~~~~"), color = aihu)
+    )
+ggscatter(
+  data, x = "Vertrauen", y = "Interesse",
+  color = "anthropomorphismus", add = "reg.line"
+  )+
+  stat_regline_equation(
+    aes(label =  paste(..eq.label.., ..rr.label.., sep = "~~~~"), color = anthropomorphismus)
+    )
+
+data$Geschlecht <- as.numeric(data$Geschlecht)
+ggscatter(
+  data, x = "Vertrauen", y = "Geschlecht",
+  color = "aihu", add = "reg.line"
+  )+
+  stat_regline_equation(
+    aes(label =  paste(..eq.label.., ..rr.label.., sep = "~~~~"), color = aihu)
+    )
+
+#test homogeneity of regression slopes (no significant interaction between the covariate and the grouping variable)
+data %>% anova_test(Vertrauen ~ aihu*Interesse)
+data %>% anova_test(Vertrauen ~ anthropomorphismus*Interesse)
+#results show significant interaction for anthropomorphismus*Vertrauen -> problem
+```
+
+
+```{r}
+#normality of residuals
+# Fit the model, the covariate goes first
+modelnorm <- lm(Vertrauen ~ Interesse + aihu, data = data)
+
+# Inspect the model diagnostic metrics
+model.metrics <- augment(modelnorm) |>
+  select(c(Vertrauen, Interesse, aihu, .resid, .cooksd, .std.resid))
+head(model.metrics)
+
+# Assess normality of residuals using shapiro wilk test
+shapiro_test(model.metrics$.resid)
+#is significant -> normality of residuals not given
+
+#levene test for homogeneity of variance
+model.metrics %>% levene_test(.resid ~ aihu)
+#is given
+
+#remove effect of covariate
+res.aov <- data %>% anova_test(Interesse ~ Vertrauen + aihu)
+get_anova_table(res.aov)
+
+#post hoc test
+pwc1 <- data %>% 
+  emmeans_test(
+    Vertrauen ~ aihu, covariate = Interesse,
+    p.adjust.method = "bonferroni"
+    )
+pwc1
+get_emmeans(pwc1)
+
+pwc2 <- data %>% 
+  emmeans_test(
+    Vertrauen ~ anthropomorphismus, covariate = Interesse,
+    p.adjust.method = "bonferroni"
+    )
+pwc2
+get_emmeans(pwc2)
+
+pwc3 <- data %>% 
+  emmeans_test(
+    Vertrauen ~ anthropomorphismus, covariate = Interesse,
+    p.adjust.method = "bonferroni"
+    )
+pwc3
+get_emmeans(pwc3)
+
+# Visualization: line plots with p-values
+pwc1 <- pwc1 %>% add_xy_position(x = "aihu", fun = "mean_se")
+ggline(get_emmeans(pwc1), x = "aihu", y = "emmean") +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2) + 
+  stat_pvalue_manual(pwc1, hide.ns = TRUE, tip.length = FALSE) +
+  labs(
+    subtitle = get_test_label(res.aov, detailed = TRUE),
+    caption = get_pwc_label(pwc1)
+  )
+
+pwc2 <- pwc2 %>% add_xy_position(x = "anthropomorphismus", fun = "mean_se")
+ggline(get_emmeans(pwc2), x = "anthropomorphismus", y = "emmean") +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.2) + 
+  stat_pvalue_manual(pwc2, hide.ns = TRUE, tip.length = FALSE) +
+  labs(
+    subtitle = get_test_label(res.aov, detailed = TRUE),
+    caption = get_pwc_label(pwc2)
+  )
+```
+
+```{r}
+#individual stat tests
+#interest and confidence correlation
+reg_testInt <- lm(Vertrauen ~Interesse, data = data)
+anova(reg_testInt)
+#insignificant: covariate interest and confidence are independent
+
+#time spent and confidence correlation
+reg_testInt2 <- lm(Vertrauen ~Beschäftigung, data = data)
+anova(reg_testInt2)
+
+#levene test
+#levene_test(Vertrauen ~Interesse, data = data)
+
+model <- aov(Vertrauen ~ Interesse, data = data)
+summary(model)
+#TukeyHSD(model)
+
+#confidence by age
+reg_testAge <- lm(Vertrauen ~Alter, data = data)
+anova(reg_testAge)
+
+#confidence by education
+reg_testEdu <- lm(Vertrauen ~Bildungsabschluss, data = data)
+anova(reg_testEdu)
+
+#confidence by gender
+reg_testGen <- lm(Vertrauen ~Geschlecht, data = data)
+anova(reg_testGen)
+
+#confidence by Accuracy
+reg_testAcc <- lm(Vertrauen ~Accuracy, data = data)
+anova(reg_testAcc)
+```
+
+```{r}
+#ancova for dv confidence
+ancova_model <- aov(Vertrauen ~ aihu*anthropomorphismus + Severity + Empathie + Kompetenz + Interesse + Beschäftigung + Bildungsabschluss + Alter + Geschlecht, data = data)
+Anova(ancova_model, type="III")
+
+pairwise.t.test(data$Vertrauen, data$Geschlecht, p.adj = "bonf")
+pairwise.t.test(data$Vertrauen, data$Empathie, p.adj = "bonf")
+pairwise.t.test(data$Vertrauen, data$Kompetenz, p.adj = "bonf")
+
+#mediation analyses
+fit.totaleffect <- lm(Vertrauen ~aihu*anthropomorphismus, data)
+summary(fit.totaleffect)
+
+#for empathy
+fit.mediator1 <- lm(Empathie ~aihu*anthropomorphismus, data)
+summary(fit.mediator1)
+fit.dv1=lm(Vertrauen ~aihu*anthropomorphismus + Empathie, data)
+summary(fit.dv1)
+results1 <- mediate(fit.mediator1, fit.dv1, treat='aihu', mediator='Empathie', boot=T)
+summary(results1)
+results2 <- mediate(fit.mediator1, fit.dv1, treat='anthropomorphismus', mediator='Empathie', boot=T)
+summary(results2)
+
+#for competence
+fit.mediator2 <- lm(Kompetenz ~aihu*anthropomorphismus, data)
+summary(fit.mediator2)
+fit.dv2=lm(Vertrauen ~aihu*anthropomorphismus + Kompetenz, data)
+summary(fit.dv2)
+results3 <- mediate(fit.mediator2, fit.dv2, treat='aihu', mediator='Kompetenz', boot=T)
+summary(results3)
+results4 <- mediate(fit.mediator2, fit.dv2, treat='anthropomorphismus', mediator='Kompetenz', boot=T)
+summary(results4)
+
+#comment to read results: ACME = average causal mediation effects (indirect effect of IV on DV that goes through the mediator). ADE = average direct effects (direct effect of IV on DV). Total Effect = total effect (direct + indirect) of IV onto DV. Prop. Mediated = proportion of the effect of the IV on the DV that goes through the mediator.
+
+#visualise effects
+#install.packages("diagram")
+library("shape")
+library("diagram")
+data <- c(0, "'.25*'", 0,
+          0, 0, 0, 
+          "'.27**'", "'.21** (.006)'", 0)
+M<- matrix (nrow=3, ncol=3, byrow = TRUE, data=data)
+plot<- plotmat (M, pos=c(1,2), 
+                name= c( "Empathie","Mensch (vs. KI)", "Vertrauen \nin Diagnose"), 
+                box.type = "rect", box.size = 0.12, box.prop=0.5,  curve=0)
+
+data <- c(0, "'-1.5*'", 0,
+          0, 0, 0, 
+          "'.21*'", "'-.65** (<.001)'", 0)
+M<- matrix (nrow=3, ncol=3, byrow = TRUE, data=data)
+plot<- plotmat (M, pos=c(1,2), 
+                name= c( "Empathie","Anthropomorphismus \n(Niedrig)", "Vertrauen \nin Diagnose"), 
+                box.type = "rect", box.size = 0.12, box.prop=0.5,  curve=0)
+
+data <- c(0, "'.25*'", 0,
+          0, 0, 0, 
+          "'.27**'", "'.21** (.006)'", 0)
+M<- matrix (nrow=3, ncol=3, byrow = TRUE, data=data)
+plot<- plotmat (M, pos=c(1,2), 
+                name= c( "Kompetenz","Mensch (vs. KI)", "Vertrauen \nin Diagnose"), 
+                box.type = "rect", box.size = 0.12, box.prop=0.5,  curve=0)
+
+data <- c(0, "'-1.5*'", 0,
+          0, 0, 0, 
+          "'.21*'", "'-.65** (<.001)'", 0)
+M<- matrix (nrow=3, ncol=3, byrow = TRUE, data=data)
+plot<- plotmat (M, pos=c(1,2), 
+                name= c( "Kompetenz","Anthropomorphismus \n(Niedrig)", "Vertrauen \nin Diagnose"), 
+                box.type = "rect", box.size = 0.12, box.prop=0.5,  curve=0)
+```
+
